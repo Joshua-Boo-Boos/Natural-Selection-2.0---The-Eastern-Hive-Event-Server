@@ -58,6 +58,21 @@ CloakableMixin.networkVars =
     maxCloakFraction = "float (0 to 1 by 0.01)",
 }
 
+-- Initialises only the non-networked Lua instance fields.
+-- Called from __initmixin AND defensively from UpdateCloakState so that entities
+-- whose OnInitialized never called InitMixin(self, CloakableMixin) (e.g. the
+-- custom Vokex class in CNBalance, which skips the parent OnInitialized) still
+-- get valid values before any arithmetic is attempted on them.
+local function InitCloakInstanceFields(self)
+    -- cloakFraction is intentionally set from the networked fullyCloaked flag so
+    -- that a fully-cloaked entity entering a phase gate or evolving stays invisible.
+    if self.cloakFraction        == nil then self.cloakFraction        = (self.fullyCloaked and 1 or 0) end
+    if self.desiredCloakFraction == nil then self.desiredCloakFraction = 0 end
+    if self.timeCloaked          == nil then self.timeCloaked          = 0 end
+    if self.timeUncloaked        == nil then self.timeUncloaked        = 0 end
+    if self.speedScalar          == nil then self.speedScalar          = 0 end
+end
+
 function CloakableMixin:__initmixin()
 
     PROFILE("CloakableMixin:__initmixin")
@@ -67,14 +82,11 @@ function CloakableMixin:__initmixin()
         self.fullyCloaked = false
     end
 
-    self.desiredCloakFraction = 0
-    self.timeCloaked = 0
-    self.timeUncloaked = 0
     self.maxCloakFraction = 1
 
-    -- when entity is created on client consider fully cloaked, so units wont show up for a short moment when going through a phasegate for example
-    self.cloakFraction = self.fullyCloaked and 1 or 0
-    self.speedScalar = 0
+    -- Initialise all non-networked Lua fields via the shared helper so there is
+    -- one canonical place that lists every field this mixin depends on.
+    InitCloakInstanceFields(self)
 
 end
 
@@ -184,6 +196,18 @@ end
 
 local function UpdateCloakState(self, deltaTime)
     PROFILE("CloakableMixin:OnUpdate")
+
+    -- If cloakFraction is nil, __initmixin was never called on this entity instance.
+    -- This happens with custom lifeforms (e.g. Vokex) whose OnInitialized does not
+    -- call InitMixin(self, CloakableMixin), so the non-networked Lua fields are absent
+    -- even though network vars are present.  Re-running field initialisation here is
+    -- the correct fix: it sets ALL dependent fields from one authoritative source,
+    -- whereas a per-line 'or 0' band-aid would still leave timeCloaked / timeUncloaked
+    -- / speedScalar unguarded and prone to the same crash.
+    if self.cloakFraction == nil then
+        InitCloakInstanceFields(self)
+    end
+
     -- Account for trigger cloak, uncloak, camouflage speed
     UpdateDesiredCloakFraction(self, deltaTime)
 
