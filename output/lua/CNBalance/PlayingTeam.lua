@@ -88,6 +88,7 @@ function PlayingTeam:Update()
 
     if gameStarted then
         self:UpdateDeadlock()
+        self:UpdateBotEconomy()
     end
 end
 
@@ -230,10 +231,69 @@ local function extGetIsResearchRelevant(techId)
     return oldGetIsResearchRelevant(techId)
 end
 
+local kDeadlockDecayInterval = 15     -- seconds per decay tick
+local kDeadlockPeriodMinutes = 1.25   -- minutes per escalating band
+local kDeadlockMinScale = 0.50        -- floor: a structure never drops below 50% of its base max EHP
+-- Per-15s-tick reduction for each consecutive 1.25-minute band (5 ticks/band).
+-- Constant +1% step, so cumulative reduction reaches exactly 50% at T+5 minutes:
+--   5*(1 + 2 + 3 + 4)% = 50%.
+local kDeadlockPeriodRates = { 0.01, 0.02, 0.03, 0.04 }
+
+-- Absolute deadlock scale as a function of seconds elapsed since the deadlock
+-- start time T. Returns the fraction of base max EHP a structure should have RIGHT
+-- NOW. Being a pure function of elapsed time, it gives brand-new structures the
+-- correct catch-up value: one placed at T+12 is scaled to exactly what it would be
+-- had it existed since T.
+local function ComputeDeadlockScale(elapsedSeconds)
+    local ticks = math.floor(math.max(0, elapsedSeconds) / kDeadlockDecayInterval)
+    local ticksPerBand = (kDeadlockPeriodMinutes * 60) / kDeadlockDecayInterval -- 20
+    local reduction = 0
+    for band = 1, #kDeadlockPeriodRates do
+        local bandTicks = math.min(ticks - (band - 1) * ticksPerBand, ticksPerBand)
+        if bandTicks <= 0 then break end
+        reduction = reduction + bandTicks * kDeadlockPeriodRates[band]
+    end
+    return math.max(kDeadlockMinScale, 1 - reduction)
+end
+
+-- Force a single structure's max health/armor to (base * scale). The pre-deadlock
+-- base maxima are captured ONCE (first time we touch the structure) so the scale is
+-- always applied against the true originals instead of compounding each pass.
+local function ApplyDeadlockScaleToStructure(target, scale)
+
+    if not target.SetMaxHealth or not target.GetMaxHealth then return end
+    if target.CanTakeDamage and not target:CanTakeDamage() then return end
+
+    if not target.deadlockBaseMaxHealth then
+        target.deadlockBaseMaxHealth = target:GetMaxHealth()
+        target.deadlockBaseMaxArmor = (target.GetMaxArmor and target:GetMaxArmor()) or 0
+    end
+
+    local newMaxHealth = math.max(1, math.floor(target.deadlockBaseMaxHealth * scale + 0.5))
+    if target:GetMaxHealth() ~= newMaxHealth then
+        target:SetMaxHealth(newMaxHealth)
+        if target.GetHealth and target:GetHealth() > newMaxHealth then
+            if target.SetHealth then target:SetHealth(newMaxHealth) else target.health = newMaxHealth end
+        end
+    end
+
+    if target.SetMaxArmor and target.GetMaxArmor then
+        local newMaxArmor = math.max(0, math.floor(target.deadlockBaseMaxArmor * scale + 0.5))
+        if target:GetMaxArmor() ~= newMaxArmor then
+            target:SetMaxArmor(newMaxArmor)
+            if target.GetArmor and target:GetArmor() > newMaxArmor then
+                if target.SetArmor then target:SetArmor(newMaxArmor) else target.armor = newMaxArmor end
+            end
+        end
+    end
+
+end
+
 function PlayingTeam:OnGameStateChanged(_state)
     if _state == kGameState.Started then
+        self.deadlockGameStartTime = Shared.GetTime()
         self.deadlockTime = Shared.GetTime() + (NS2Gamerules.kBalanceConfig.deadlockInitialTime or 99999)
-        self.deadlockDamageInterval = 0
+        self.deadlockDamageInterval = self.deadlockTime + kDeadlockDecayInterval
         self.deadlockBroadcastInterval = 0
     end
 end
@@ -244,6 +304,12 @@ function PlayingTeam:OnDeadlockExtend(techID)
 end
 
 function PlayingTeam:UpdateDeadlock()
+    -- Master on/off switch (NS2.0Config.json -> deadlockEnabled)
+    if NS2Gamerules and NS2Gamerules.kBalanceConfig
+       and NS2Gamerules.kBalanceConfig.deadlockEnabled == false then
+        return
+    end
+
     local now = Shared.GetTime()
     if now > self.deadlockTime then
         -- Count human players on both teams (ignore bots, spectators, ready room)
@@ -285,63 +351,83 @@ function PlayingTeam:UpdateDeadlock()
             return
         end
         
-        -- Fixed 2% of original EHP per tick applied to both teams' structures
-        local kDamagePercentage = 0.02
-        local kDecayInterval = 15
-        local kMinScale = 0.4
-        if now > self.deadlockDamageInterval then
-            self.deadlockDamageInterval = now + kDecayInterval
+        -- Escalating decay measured from the configured deadlock start time T
+        -- (T = round start + deadlockInitialTime, NS2.0Config.json). The per-15s
+        -- reduction steps up by a constant 1% every 1.25 minutes, reaching the 50%
+        -- floor exactly at T+5 minutes (see ComputeDeadlockScale / kDeadlockPeriodRates):
+        --   [T,T+1.25) 1%   [T+1.25,T+2.5) 2%   [T+2.5,T+3.75) 3%   [T+3.75,T+5) 4%
+        --
+        -- We apply an ABSOLUTE scale (base max EHP * scale) to EVERY structure --
+        -- both teams AND neutral ones (e.g. unsocketed power nodes) -- with no
+        -- opt-outs, so chairs, RTs, power nodes and hives are all affected. Because
+        -- the scale is a pure function of elapsed time, a structure placed mid-
+        -- deadlock (say at T+3) is immediately set to the same max-EHP % it would
+        -- have had if it had existed since T (catch-up).
+        --
+        -- ===================== OLD DEADLOCK STRUCTURE PASS (commented for reference / toggle) =====================
+        -- The previous version iterated structures PER TEAM and skipped any with
+        -- kIgnoreDeadlock (so chairs, RTs, power nodes and hives were NOT affected),
+        -- and it reduced max EHP incrementally each 15s tick instead of to an
+        -- absolute time-based target (so newly-placed structures started at full
+        -- health with no catch-up). To restore it, comment out the new block below
+        -- and uncomment this one.
+        --
+        -- local kMinScale = 0.50
+        -- local kDeadlockPeriodRatesOld = { 0.0025, 0.005, 0.0075, 0.010 }
+        -- local damageFraction = 0
+        -- if now > self.deadlockDamageInterval then
+        --     self.deadlockDamageInterval = now + kDeadlockDecayInterval
+        --     local lastDeadlockTickTime = gamerules and gamerules._lastDeadlockTickTime or nil
+        --     local shouldApplyDamage = not lastDeadlockTickTime or now >= lastDeadlockTickTime + kDeadlockDecayInterval
+        --     if shouldApplyDamage then
+        --         if gamerules then gamerules._lastDeadlockTickTime = now end
+        --         local minutesSinceDeadlockStart = math.max(0, (now - self.deadlockTime) / 60)
+        --         local deadlockPeriod = math.max(1, math.floor(minutesSinceDeadlockStart / kDeadlockPeriodMinutes) + 1)
+        --         damageFraction = kDeadlockPeriodRatesOld[math.min(deadlockPeriod, #kDeadlockPeriodRatesOld)]
+        --     end
+        -- end
+        -- if damageFraction > 0 then
+        --     for teamNum = kTeam1Index, kTeam2Index do
+        --         for _, target in ipairs(GetEntitiesWithMixinForTeam("Construct", teamNum)) do
+        --             if not target.kIgnoreDeadlock and target.SetMaxHealth then
+        --                 if not target.CanTakeDamage or target:CanTakeDamage() then
+        --                     if not target.originalMaxHealth then
+        --                         target.originalMaxHealth = target:GetMaxHealth()
+        --                         target.originalMaxArmor = target:GetMaxArmor()
+        --                         target.originalEHP = target.originalMaxHealth + target.originalMaxArmor * kHealthPointsPerArmor
+        --                     end
+        --                     local origEHP = target.originalEHP or (target:GetMaxHealth() + target:GetMaxArmor() * kHealthPointsPerArmor)
+        --                     local currentMaxEHP = target:GetMaxHealth() + target:GetMaxArmor() * kHealthPointsPerArmor
+        --                     local newMaxEHP = math.max(currentMaxEHP - origEHP * damageFraction, origEHP * kMinScale)
+        --                     local scale = newMaxEHP / origEHP
+        --                     local newMaxHealth = math.max(1, math.floor((target.originalMaxHealth or target:GetMaxHealth()) * scale + 0.5))
+        --                     local newMaxArmor = math.max(0, math.floor((target.originalMaxArmor or target:GetMaxArmor()) * scale + 0.5))
+        --                     target:SetMaxHealth(newMaxHealth)
+        --                     target:SetMaxArmor(newMaxArmor)
+        --                     if target.GetHealth and target:GetHealth() > newMaxHealth then
+        --                         if target.SetHealth then target:SetHealth(newMaxHealth) else target.health = newMaxHealth end
+        --                     end
+        --                     if target.GetArmor and target:GetArmor() > newMaxArmor then
+        --                         if target.SetArmor then target:SetArmor(newMaxArmor) else target.armor = newMaxArmor end
+        --                     end
+        --                 end
+        --             end
+        --         end
+        --     end
+        -- end
+        -- =========================================================================================================
 
-            local gamerules = GetGamerules()
-            if gamerules and gamerules._lastDeadlockTick == now then
-                return
+        -- Both teams call UpdateDeadlock; throttle the structure pass so it runs a
+        -- couple of times a second globally (cheap, and catches new structures fast).
+        local runStructurePass = (not gamerules) or (not gamerules._nextDeadlockScale) or (now >= gamerules._nextDeadlockScale)
+        if runStructurePass then
+            if gamerules then
+                gamerules._nextDeadlockScale = now + 0.5
             end
-            if gamerules then gamerules._lastDeadlockTick = now end
 
-            for teamNum = kTeam1Index, kTeam2Index do
-                for _, target in ipairs(GetEntitiesWithMixinForTeam("Construct", teamNum)) do
-                    if not target.kIgnoreDeadlock and target.SetMaxHealth then
-                        if not target.CanTakeDamage or target:CanTakeDamage() then
-
-                            -- store original max values on first application
-                            if not target.originalMaxHealth then
-                                target.originalMaxHealth = target:GetMaxHealth()
-                                target.originalMaxArmor = target:GetMaxArmor()
-                                target.originalEHP = target.originalMaxHealth + target.originalMaxArmor * kHealthPointsPerArmor
-                            end
-
-                            local origEHP = target.originalEHP or (target:GetMaxHealth() + target:GetMaxArmor() * kHealthPointsPerArmor)
-                            local currentMaxEHP = target:GetMaxHealth() + target:GetMaxArmor() * kHealthPointsPerArmor
-
-                            -- reduce current max EHP by fixed amount (2% of original EHP) but not below 25% of original
-                            local newMaxEHP = math.max(currentMaxEHP - origEHP * kDamagePercentage, origEHP * kMinScale)
-                            local scale = newMaxEHP / origEHP
-
-                            local newMaxHealth = math.max(1, math.floor((target.originalMaxHealth or target:GetMaxHealth()) * scale + 0.5))
-                            local newMaxArmor = math.max(0, math.floor((target.originalMaxArmor or target:GetMaxArmor()) * scale + 0.5))
-
-                            target:SetMaxHealth(newMaxHealth)
-                            target:SetMaxArmor(newMaxArmor)
-
-                            -- clamp current health/armor to new maxima (only reduce if above)
-                            if target.GetHealth and target:GetHealth() > newMaxHealth then
-                                if target.SetHealth then
-                                    target:SetHealth(newMaxHealth)
-                                else
-                                    target.health = newMaxHealth
-                                end
-                            end
-                            if target.GetArmor and target:GetArmor() > newMaxArmor then
-                                if target.SetArmor then
-                                    target:SetArmor(newMaxArmor)
-                                else
-                                    target.armor = newMaxArmor
-                                end
-                            end
-
-                        end
-                    end
-                end
+            local scale = ComputeDeadlockScale(now - self.deadlockTime)
+            for _, target in ipairs(GetEntitiesWithMixin("Construct")) do
+                ApplyDeadlockScaleToStructure(target, scale)
             end
         end
 
@@ -351,6 +437,197 @@ function PlayingTeam:UpdateDeadlock()
             self:PlayPrivateTeamSound(self.kDeadlockAlert)
         end
     end
+end
+
+-- =====================================================================
+-- Bot economy: force bots to actually SPEND their personal resources.
+--
+-- Problem: bots hoarded p-res toward the 100 cap instead of evolving
+-- (aliens) or buying gear (marines), because the stock bot brains only
+-- evolve/buy under very strict conditions (e.g. within 8m of a hive with
+-- no threat within 25m) that are rarely met. This supplemental server-side
+-- pass runs alongside the brains and makes bots spend spare res through the
+-- SAME validated path players use (ProcessBuyAction), so any attempt that
+-- isn't currently legal (wrong location, tech not researched, can't afford)
+-- simply no-ops -- it can never create an invalid purchase.
+-- =====================================================================
+
+local kBotEconomyInterval = 4   -- seconds between economy passes (per team)
+local kBotEvolveDangerRange = 18 -- don't evolve (become a vulnerable egg) with an enemy this close
+local kBotResHoardCap = 75      -- if a bot reaches this much res it MUST spend, even if its role target is locked
+
+-- Role-weighted alien lifeform targets (weights need not sum to anything).
+-- Includes the custom Prowler & Vokex lifeforms so bots actually become them.
+local kAlienLifeformWeights =
+{
+    { techId = kTechId.Gorge,   weight = 12 },
+    { techId = kTechId.Prowler, weight = 16 },
+    { techId = kTechId.Lerk,    weight = 20 },
+    { techId = kTechId.Fade,    weight = 22 },
+    { techId = kTechId.Vokex,   weight = 16 },
+    { techId = kTechId.Onos,    weight = 14 },
+}
+
+-- Marine primary goals, a roughly-even split across the high-value purchases.
+-- Welders are layered on top (see TryBuyMarineBot) so some welders are always
+-- bought without starving the weapon/JP/exo purchases.
+local kMarinePrimaryGoals =
+{
+    kTechId.Shotgun,
+    kTechId.HeavyMachineGun,
+    kTechId.GrenadeLauncher,
+    kTechId.Jetpack,
+    kTechId.DualMinigunExosuit,
+}
+
+local function GetIsLifeformEvolveAvailable(player, techId)
+    local techTree = player.GetTechTree and player:GetTechTree()
+    if not techTree then return false end
+    local node = techTree:GetTechNode(techId)
+    -- Same eligibility check the stock bot evolve action uses.
+    return node ~= nil and node:GetAvailable(player, techId, false)
+end
+
+-- True only when it's reasonably safe to spend several seconds as an egg.
+local function GetIsBotSafeToEvolve(player)
+    if player.GetIsInCombat and player:GetIsInCombat() then return false end
+    local enemyTeam = GetEnemyTeamNumber(player:GetTeamNumber())
+    for _, enemy in ipairs(GetEntitiesForTeamWithinRange("Player", enemyTeam, player:GetOrigin(), kBotEvolveDangerRange)) do
+        if enemy.GetIsAlive and enemy:GetIsAlive() then
+            return false
+        end
+    end
+    return true
+end
+
+-- Assign each bot a fixed role target once (weighted random), so the team gets
+-- a varied composition rather than everyone funnelling into one lifeform.
+local function GetBotLifeformTarget(player)
+    if not player.botEcoLifeformTarget then
+        local total = 0
+        for i = 1, #kAlienLifeformWeights do
+            total = total + kAlienLifeformWeights[i].weight
+        end
+        local roll = math.random() * total
+        local acc = 0
+        for i = 1, #kAlienLifeformWeights do
+            acc = acc + kAlienLifeformWeights[i].weight
+            if roll <= acc then
+                player.botEcoLifeformTarget = kAlienLifeformWeights[i].techId
+                break
+            end
+        end
+        player.botEcoLifeformTarget = player.botEcoLifeformTarget or kTechId.Lerk
+    end
+    return player.botEcoLifeformTarget
+end
+
+-- Highest-cost lifeform the bot can currently afford AND evolve to (anti-hoard fallback).
+local function GetBestAffordableLifeform(player, res)
+    local bestId, bestCost = nil, -1
+    for i = 1, #kAlienLifeformWeights do
+        local id = kAlienLifeformWeights[i].techId
+        local cost = GetCostForTech(id) or math.huge
+        if cost <= res and cost > bestCost and GetIsLifeformEvolveAvailable(player, id) then
+            bestId, bestCost = id, cost
+        end
+    end
+    return bestId
+end
+
+local function TryEvolveAlienBot(player)
+    -- Only base lifeforms get auto-evolved; already-evolved bots have spent.
+    if not player.isa or not player:isa("Skulk") then return end
+    if not player:GetIsAlive() then return end
+    if player.GetIsAllowedToBuy and not player:GetIsAllowedToBuy() then return end
+    if not GetIsBotSafeToEvolve(player) then return end
+
+    local res = player.GetPersonalResources and player:GetPersonalResources()
+    if not res or res <= 0 then return end
+
+    local target = GetBotLifeformTarget(player)
+    local targetCost = GetCostForTech(target) or math.huge
+
+    -- 1) Role target is reachable & affordable -> evolve straight into it.
+    if res >= targetCost and GetIsLifeformEvolveAvailable(player, target) then
+        player:ProcessBuyAction({ target })
+        return
+    end
+
+    -- 2) Anti-hoard: we have enough for the target but it's still locked (e.g. not
+    --    enough biomass yet), or we're near the cap -> spend on the best lifeform
+    --    available now instead of sitting on resources.
+    if res >= targetCost or res >= kBotResHoardCap then
+        local bestId = GetBestAffordableLifeform(player, res)
+        if bestId then
+            player:ProcessBuyAction({ bestId })
+        end
+    end
+end
+
+local function GetMarineAlreadyHasGoal(player, goal)
+    if goal == kTechId.Jetpack then
+        return player.isa and player:isa("JetpackMarine")
+    end
+    if goal == kTechId.DualMinigunExosuit or goal == kTechId.DualRailgunExosuit then
+        return player.isa and player:isa("Exo")
+    end
+    -- Weapon goals: don't rebuy the primary weapon we already hold.
+    local wep = player.GetWeaponInHUDSlot and player:GetWeaponInHUDSlot(1)
+    return wep ~= nil and wep.GetTechId and wep:GetTechId() == goal
+end
+
+local function TryBuyMarineBot(player)
+    if not player:GetIsAlive() then return end
+    if player.isa and player:isa("Exo") then return end -- exos can't buy anything
+    if player.GetIsAllowedToBuy and not player:GetIsAllowedToBuy() then return end
+
+    local res = player.GetResources and player:GetResources()
+    if not res or res <= 0 then return end
+
+    -- Assign a varied purchase plan once.
+    if not player.botEcoMarineGoal then
+        player.botEcoMarineGoal = kMarinePrimaryGoals[math.random(1, #kMarinePrimaryGoals)]
+        player.botEcoWantsWelder = math.random() < 0.5   -- ~half of bots also carry a welder
+    end
+
+    -- Welder first (cheap utility) when wanted and not already held. ProcessBuyAction
+    -- only succeeds near an armory, so this naturally happens when regrouping.
+    if player.botEcoWantsWelder and player.GetWeapon and not player:GetWeapon(Welder.kMapName) then
+        local welderCost = GetCostForTech(kTechId.Welder) or 0
+        if res >= welderCost and player:ProcessBuyAction({ kTechId.Welder }) then
+            return
+        end
+    end
+
+    local goal = player.botEcoMarineGoal
+    if GetMarineAlreadyHasGoal(player, goal) then return end
+
+    local cost = GetCostForTech(goal) or math.huge
+    if res >= cost then
+        player:ProcessBuyAction({ goal })
+    end
+end
+
+function PlayingTeam:UpdateBotEconomy()
+
+    local now = Shared.GetTime()
+    if self._nextBotEconomyTime and now < self._nextBotEconomyTime then return end
+    self._nextBotEconomyTime = now + kBotEconomyInterval
+
+    local teamType = self:GetTeamType()
+    if teamType ~= kAlienTeamType and teamType ~= kMarineTeamType then return end
+
+    for _, player in ipairs(self:GetPlayers()) do
+        if player and player.GetIsVirtual and player:GetIsVirtual() then
+            if teamType == kAlienTeamType then
+                TryEvolveAlienBot(player)
+            else
+                TryBuyMarineBot(player)
+            end
+        end
+    end
+
 end
 
 debug.setupvaluex(PlayingTeam.OnResearchComplete, "GetIsResearchRelevant", extGetIsResearchRelevant)
