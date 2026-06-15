@@ -1615,8 +1615,7 @@ function CreateGorgeBrainSenses()
                 ( healTarget.GetIsBuilt and healTarget:GetIsBuilt() ) or  
                 ( healTarget:GetIsAlive() )
             )
-            -- Exclude Clogs from considered healable targets so Gorges won't try to healspray them
-            if isValidHealable and not healTarget:isa("Clog") then
+            if isValidHealable then
                 table.insert(healables, healTarget)
             end
         end
