@@ -298,3 +298,16 @@ ModLoader.SetupFileHook("lua/NetworkMessages.lua", "lua/CNBalance/CommMapTools_S
 ModLoader.SetupFileHook("lua/NS2Gamerules.lua", "lua/CNBalance/CommMapTools_Server.lua", "post")
 ModLoader.SetupFileHook("lua/NetworkMessages_Client.lua", "lua/CNBalance/CommMapTools_Client.lua", "post")
 ModLoader.SetupFileHook("lua/GUIMinimapFrame.lua", "lua/CNBalance/GUIMinimapFrame.lua", "post")
+
+
+-- Armory weapon storage. Split across four targets because load order BETWEEN hooks on different
+-- files is not guaranteed: the shared half rides NetworkMessages.lua (loaded early in every VM, so
+-- the globals and the ArmoryStock message exist before anything below runs), then each half hooks
+-- the file that actually defines the functions it wraps.
+ModLoader.SetupFileHook("lua/NetworkMessages.lua", "lua/CNBalance/ArmoryStorage_Shared.lua", "post")
+ModLoader.SetupFileHook("lua/Armory.lua", "lua/CNBalance/ArmoryStorage_Armory.lua", "post")
+ModLoader.SetupFileHook("lua/Weapons/Weapon_Server.lua", "lua/CNBalance/ArmoryStorage_Weapon.lua", "post")
+ModLoader.SetupFileHook("lua/Marine_Server.lua", "lua/CNBalance/ArmoryStorage_Marine.lua", "post")
+ModLoader.SetupFileHook("lua/NetworkMessages_Client.lua", "lua/CNBalance/ArmoryStorage_Client.lua", "post")
+ModLoader.SetupFileHook("lua/NS2Gamerules.lua", "lua/CNBalance/ArmoryStorage_Gamerules.lua", "post")
+ModLoader.SetupFileHook("lua/PickupableWeaponMixin.lua", "lua/CNBalance/ArmoryStorage_Pickup.lua", "post")
