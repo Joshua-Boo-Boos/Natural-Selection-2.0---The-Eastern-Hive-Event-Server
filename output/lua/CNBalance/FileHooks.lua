@@ -311,3 +311,14 @@ ModLoader.SetupFileHook("lua/Marine_Server.lua", "lua/CNBalance/ArmoryStorage_Ma
 ModLoader.SetupFileHook("lua/NetworkMessages_Client.lua", "lua/CNBalance/ArmoryStorage_Client.lua", "post")
 ModLoader.SetupFileHook("lua/NS2Gamerules.lua", "lua/CNBalance/ArmoryStorage_Gamerules.lua", "post")
 ModLoader.SetupFileHook("lua/PickupableWeaponMixin.lua", "lua/CNBalance/ArmoryStorage_Pickup.lua", "post")
+
+-- Hive-sight outline repair: re-attach the outline when an entity's render model instance is
+-- swapped while it stays visible (parasited structure under sustained damage). Client-side only.
+ModLoader.SetupFileHook("lua/HiveVisionMixin.lua", "lua/CNBalance/HiveVisionMixin.lua", "post")
+
+-- Bot crash guards: nil aimTurnRate (BotMotion), nil gateway route (BotUtils), nil threat
+-- gateway (SkulkBrain_Data). See BotCrashGuards.lua for each.
+ModLoader.SetupFileHook("lua/bots/BotAim.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_BotAim.lua", "post")
+ModLoader.SetupFileHook("lua/bots/BotUtils.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_BotUtils.lua", "post")
+ModLoader.SetupFileHook("lua/bots/SkulkBrain_Data.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_SkulkBrain_Data.lua", "post")
+ModLoader.SetupFileHook("lua/bots/PlayerBrain.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_PlayerBrain.lua", "post")
