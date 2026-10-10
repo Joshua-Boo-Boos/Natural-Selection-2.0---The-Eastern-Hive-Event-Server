@@ -1,5 +1,10 @@
 Shared.RegisterNetworkMessage("DevourEscape", {})
 
+-- Team announcement (SERVER -> CLIENT): a line printed exactly as sent, in the team colour, with no "(Team) :" in
+-- front - e.g. "[Origin Form]: <player> has taken <n> t-res from the team pool as p-res." Same name and shape as the
+-- Beta build's message, so AlienTeam.lua is identical in every build. Shown by CNBalance/TeamAnnounce_Chat.lua.
+Shared.RegisterNetworkMessage("CETeamAnnounce", { message = "string (220)" })
+
 function OnCommandScores(scoreTable)
 
     local status = kPlayerStatus[scoreTable.status]

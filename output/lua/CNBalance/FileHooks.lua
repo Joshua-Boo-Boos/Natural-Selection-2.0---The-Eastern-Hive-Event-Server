@@ -17,6 +17,9 @@ ModLoader.SetupFileHook("lua/NS2Utility_Server.lua", "lua/CNBalance/NS2Utility_S
 ModLoader.SetupFileHook("lua/NS2ConsoleCommands_Server.lua", "lua/CNBalance/NS2ConsoleCommands_Server.lua", "post" )
 ModLoader.SetupFileHook("lua/NetworkMessages.lua", "lua/CNBalance/NetworkMessages.lua", "post" )
 ModLoader.SetupFileHook("lua/NetworkMessages.lua", "lua/CNBalance/PrimalScreamFX.lua", "post" )
+-- Team announcements ("[Origin Form]: ...") as a clean team-coloured chat line. Post Chat.lua: it reaches that file's
+-- chatMessages list.
+ModLoader.SetupFileHook("lua/Chat.lua", "lua/CNBalance/TeamAnnounce_Chat.lua", "post")
 ModLoader.SetupFileHook("lua/NetworkMessages_Server.lua", "lua/CNBalance/NetworkMessages_Server.lua", "post" )
 ModLoader.SetupFileHook("lua/DamageMixin.lua", "lua/CNBalance/Mixin/DamageMixin.lua", "post" )
 
@@ -324,3 +327,10 @@ ModLoader.SetupFileHook("lua/bots/BotAim.lua", "lua/CNBalance/Hooks/BotCrashGuar
 ModLoader.SetupFileHook("lua/bots/BotUtils.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_BotUtils.lua", "post")
 ModLoader.SetupFileHook("lua/bots/SkulkBrain_Data.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_SkulkBrain_Data.lua", "post")
 ModLoader.SetupFileHook("lua/bots/PlayerBrain.lua", "lua/CNBalance/Hooks/BotCrashGuards__bots_PlayerBrain.lua", "post")
+
+-- A non-player "local player" (mid entity replacement) no longer breaks weapon outlines. See EquipmentOutlineGuard.lua.
+ModLoader.SetupFileHook("lua/EquipmentOutline.lua", "lua/CNBalance/EquipmentOutlineGuard.lua", "post")
+
+-- Polls (Shine ShineCustomVote) wrap onto lines of 25 characters; the vote box grows to fit. Client only. See PollWrap_Voting.lua.
+ModLoader.SetupFileHook("lua/Voting.lua", "lua/CNBalance/GUI/PollWrap_Voting.lua", "post")
+ModLoader.SetupFileHook("lua/GUIVoteMenu.lua", "lua/CNBalance/GUI/PollWrap_VoteMenu.lua", "post")
