@@ -115,11 +115,15 @@ kAlienMaxRegeneration = 80
 kAlienCrushDamagePercentByLevel = 0.07 --0.07
 
 
-kFocusDamageBonusAtMax = 0.66 kFocusAttackSlowAtMax = 2
-kSpitFocusDamageBonusAtMax = 0.5  kSpitFocusAttackSlowAtMax = 0
-kVolleyFocusDamageBonusAtMax = 0.2  kVolleyFocusAttackSlowAtMax = 0
-kSwipeFocusDamageBonusAtMax = 0.6
-kGoreFocusDamageBonusAtMax = 1  kGoreFocusAttackSlowAtMax = 1
+-- Focus: vanilla NS2 values (lua/BalanceMisc.lua). Damage scales with Veil level, up to +33% at 3 Veils; the attack slow
+-- (+33% attack delay and energy cost) applies in full from 1 Veil. Spit has no slow. Weapons vanilla doesn't have use the
+-- general values: Gore and Swipe as in vanilla, Prowler Volley like any other Focus attack, Prowler Acid Missile as Spit.
+kFocusDamageBonusAtMax = 0.33 kFocusAttackSlowAtMax = 0.33
+kSpitFocusDamageBonusAtMax = 0.33  kSpitFocusAttackSlowAtMax = 0
+kVolleyFocusDamageBonusAtMax = kFocusDamageBonusAtMax  kVolleyFocusAttackSlowAtMax = kFocusAttackSlowAtMax
+kSwipeFocusDamageBonusAtMax = kFocusDamageBonusAtMax
+kGoreFocusDamageBonusAtMax = kFocusDamageBonusAtMax  kGoreFocusAttackSlowAtMax = kFocusAttackSlowAtMax
+kStabFocusDamageBonusAtMax = kFocusDamageBonusAtMax
 
 kAlienRegenerationCombatModifier = 1
 

@@ -10,6 +10,42 @@ function ARC:GetExtraHealth(techLevel,extraPlayers,recentWins)
     return kARCHealthPerPlayerAdd * extraPlayers
 end
 
+-- Killfeed / kill credit (ported from NS2.0-TEH-Beta).
+--
+-- TeamDeathMessageMixin:GetDeathMessage and Player:OnKill resolve a non-player killer via `killer:GetOwner()` - if
+-- that returns a Player the kill is credited to them ("<Commander> killed X with ARC", "X was killed by <Commander>" in
+-- the server log), otherwise the ARC itself is shown and the server log only says "X died".
+--
+-- ARC already has an owner (OwnerMixin; RoboticsFactory:ManufactureEntity sets it to whoever ordered it), but that
+-- Commander entity is replaced whenever they leave the chair, so the owner is often gone. This EXTENDS it, never
+-- replaces it: the genuine owner if it is still a valid Player, then whoever is (or, where the team tracks it, was last)
+-- in the command chair, then nil so the ARC itself is shown.
+local baseARCGetOwner = ARC.GetOwner
+
+function ARC:GetOwner()
+
+    local owner = baseARCGetOwner and baseARCGetOwner(self)
+    if owner and owner.isa and owner:isa("Player") then
+        return owner
+    end
+
+    local team = self:GetTeam()
+    if not team then
+        return nil
+    end
+
+    local commander = team.GetCommander and team:GetCommander()
+    if commander then
+        return commander
+    end
+
+    if team.GetLastCommander then
+        return team:GetLastCommander()
+    end
+
+    return nil
+end
+
 local baseValidateTargetPosition = ARC.ValidateTargetPosition
 function ARC:ValidateTargetPosition(position)
     -- The base (vanilla ARC:ValidateTargetPosition) ALREADY returns false when any
