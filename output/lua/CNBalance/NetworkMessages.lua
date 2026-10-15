@@ -128,3 +128,12 @@ if Server then
     end
 
 end
+
+-- Custom commander Exo configuration; validated at placement.
+local kCommanderExoConfigMessage =
+{
+    baseTechId  = string.format("integer (1 to %d)", #kTechId),
+    upgradeBits = "integer (0 to 255)",
+}
+
+Shared.RegisterNetworkMessage("CommanderExoConfig", kCommanderExoConfigMessage)

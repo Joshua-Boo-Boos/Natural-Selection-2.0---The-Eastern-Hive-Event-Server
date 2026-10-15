@@ -118,6 +118,7 @@ ModLoader.SetupFileHook("lua/Commander_Buttons.lua", "lua/CNBalance/Commander_Bu
 ModLoader.SetupFileHook("lua/Commander_Server.lua", "lua/CNBalance/Commander_Server.lua", "post" )
 ModLoader.SetupFileHook("lua/AlienCommander.lua", "lua/CNBalance/AlienCommander.lua", "post" )
 ModLoader.SetupFileHook("lua/MarineCommander.lua", "lua/CNBalance/MarineCommander.lua", "replace")
+ModLoader.SetupFileHook("lua/MarineCommander.lua", "lua/CNBalance/CommanderExoDrop.lua", "post")
 
 ModLoader.SetupFileHook("lua/CommAbilities/Marine/Scan.lua", "lua/CNBalance/CommAbilities/Scan.lua", "post")
 --Marines
@@ -335,21 +336,10 @@ ModLoader.SetupFileHook("lua/EquipmentOutline.lua", "lua/CNBalance/EquipmentOutl
 ModLoader.SetupFileHook("lua/Voting.lua", "lua/CNBalance/GUI/PollWrap_Voting.lua", "post")
 ModLoader.SetupFileHook("lua/GUIVoteMenu.lua", "lua/CNBalance/GUI/PollWrap_VoteMenu.lua", "post")
 
--- ARC FACTORY SPECIALISATIONS (Hammerworks / Vanguard / Inferno). Registered last so each hook runs after the mod's own hook
--- on the same file. No new networked class or network variable - see lua/CNBalance/ARCSpec/ARCSpec_TechIds.lua.
-ModLoader.SetupFileHook("lua/TechTreeConstants.lua", "lua/CNBalance/ARCSpec/ARCSpec_TechIds.lua", "post")
-ModLoader.SetupFileHook("lua/TechData.lua", "lua/CNBalance/ARCSpec/ARCSpec_TechData.lua", "post")
-ModLoader.SetupFileHook("lua/TechTree.lua", "lua/CNBalance/ARCSpec/ARCSpec_TechTree.lua", "post")
-ModLoader.SetupFileHook("lua/TechTreeButtons.lua", "lua/CNBalance/ARCSpec/ARCSpec_Buttons.lua", "post")
-ModLoader.SetupFileHook("lua/MarineTeam.lua", "lua/CNBalance/ARCSpec/ARCSpec_MarineTeam.lua", "post")
-ModLoader.SetupFileHook("lua/RoboticsFactory.lua", "lua/CNBalance/ARCSpec/ARCSpec_RoboticsFactory.lua", "post")
-ModLoader.SetupFileHook("lua/ARCVariantMixin.lua", "lua/CNBalance/ARCSpec/ARCSpec_Skins.lua", "post")
-ModLoader.SetupFileHook("lua/ARC.lua", "lua/CNBalance/ARCSpec/ARCSpec_ARC.lua", "post")
-ModLoader.SetupFileHook("lua/NetworkMessages.lua", "lua/CNBalance/ARCSpec/ARCSpec_Shots.lua", "post")
-ModLoader.SetupFileHook("lua/RoboticsFactory.lua", "lua/CNBalance/ARCSpec/ARCSpec_FactorySkins.lua", "post")
-ModLoader.SetupFileHook("lua/GUIProduction.lua", "lua/CNBalance/ARCSpec/ARCSpec_Production.lua", "post")
-ModLoader.SetupFileHook("lua/Commander_MouseActions.lua", "lua/CNBalance/ARCSpec/ARCSpec_Selection.lua", "post")
-
 -- Alien-only Origin Form bot fetch vote and server-side enforcement.
 ModLoader.SetupFileHook("lua/Voting.lua", "lua/CNBalance/OriginGorgeVote.lua", "post")
 ModLoader.SetupFileHook("lua/AlienTeam.lua", "lua/CNBalance/OriginGorgeFetchGate.lua", "post")
+
+-- Bots: a room the bot location tracker never registered no longer crashes exploring bots (CommonActions.lua:334
+-- "attempt to index local 'locGroup'"). Server only. See LocationContentionFix.lua.
+ModLoader.SetupFileHook("lua/bots/LocationContention.lua", "lua/CNBalance/LocationContentionFix.lua", "post")

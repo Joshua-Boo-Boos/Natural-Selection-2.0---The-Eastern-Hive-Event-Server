@@ -113,7 +113,7 @@ local gMarineMenuButtons =
     [kTechId.WeaponsMenu] = { kTechId.DropShotgun, kTechId.DropGrenadeLauncher, kTechId.DropFlamethrower, kTechId.DropHeavyMachineGun,
                               kTechId.DropWelder ,kTechId.DropMines, kTechId.DropCombatBuilder,  kTechId.AssistMenu},
     
-    [kTechId.ProtosMenu] = { kTechId.DropJetpack, kTechId.DropDualMinigunExosuit, kTechId.DropDualRailgunExosuit, kTechId.None,
+    [kTechId.ProtosMenu] = { kTechId.DropJetpack, kTechId.DropDualMinigunExosuit, kTechId.None, kTechId.None,
                                 kTechId.DropCannon, kTechId.None, kTechId.None, kTechId.AssistMenu}
 }
 

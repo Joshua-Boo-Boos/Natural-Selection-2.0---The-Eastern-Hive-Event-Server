@@ -543,6 +543,11 @@ kTranslateMessage["MATURITY_STATUS"]="成熟度:%.f%%"
 kTranslateMessage["RESOURCES_ALIEN"] = "进化因子"
 kTranslateMessage["RESOURCES_MARINE"] = "军需补给点"
 
+kTranslateMessage["EXOSUIT_DROP"]="发放机甲"
+kTranslateMessage["EXOSUIT_DROP_TOOLTIP"]="*打开机甲发放菜单.\n*选择武器与实验科技.\n*消耗团队资源."
+kLocales["EXOSUIT_DROP"]="Exosuit Drop"
+kLocales["EXOSUIT_DROP_TOOLTIP"]="*Open the Exosuit drop menu.\n*Choose weapons and upgrades.\n*Paid in team resources."
+
 kLocales["MATURITY_STATUS"]="Maturity:%.f%%"
 kLocales["RESOURCES_ALIEN"] = "Evolve Matter"
 kLocales["RESOURCES_MARINE"] = "Supply Point"

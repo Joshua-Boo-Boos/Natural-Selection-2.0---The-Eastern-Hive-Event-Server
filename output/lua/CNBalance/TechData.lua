@@ -716,13 +716,21 @@ function BuildTechData()
     } )
 
     table.insert(techData, {
+        -- Commander Exo drop. This single button replaces the old Dual Minigun / Dual Railgun
+        -- pair: clicking it opens the commander's Exosuit buy window (CNBalance/CommanderExoDrop.lua)
+        -- where the combo AND its Experimental Technologies upgrades are chosen, then arms the
+        -- normal placement ghost.
+        --   * NO kTechDataLayoutKey - the layout is whatever the commander configured, applied
+        --     to the created Exosuit by MarineCommander:ProcessTechTreeActionForEntity.
+        --   * COST 0 - the price depends on that configuration, so the static tech-node cost
+        --     check in Commander:ProcessTechTreeAction must not charge or block. The real
+        --     t-res cost is checked and taken by the drop code itself.
         [kTechDataId] = kTechId.DropDualMinigunExosuit,
         [kTechDataMapName] = Exosuit.kMapName,
         [kTechDataModel] = Exosuit.kModelName,
-        [kTechDataDisplayName] = "DUAL_MINIGUN",
-        [kTechDataTooltipInfo] = "DUAL_MINIGUN_TOOLTIP",
-        [kTechDataLayoutKey] = "MinigunMinigun",
-        [kTechDataCostKey] = kDualExosuitDropCost,
+        [kTechDataDisplayName] = "EXOSUIT_DROP",
+        [kTechDataTooltipInfo] = "EXOSUIT_DROP_TOOLTIP",
+        [kTechDataCostKey] = 0,
         [kStructureAttachId] = {kTechId.PrototypeLab,kTechId.CannonPrototypeLab,kTechId.JetpackPrototypeLab,kTechId.ExosuitPrototypeLab},
         [kStructureAttachRange] = kArmoryWeaponAttachRange,
         [kStructureAttachRequiresPower] = true,
