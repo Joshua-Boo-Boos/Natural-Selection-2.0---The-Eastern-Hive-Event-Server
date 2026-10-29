@@ -104,5 +104,9 @@ kTechIdToMaterialOffset[kTechId.OriginFormPassive] = 191
 kTechIdToMaterialOffset[kTechId.OriginFormResourceFetch] = 191
 kTechIdToMaterialOffset[kTechId.DropTeamStructureAbility] = 220
 
+-- (2026-10-27) Multi Medpack (the Commander's medpack, CNBalance/MedPack.lua): its own icon in the free cell 223 of
+-- ui/buildmenu.dds - the normal medpack icon with a "+" at the upper right and "Multi Medpack". Cell 92
+-- (the plain medpack) is left alone: the "Marine needs a medpack" alert and the HUD's self-med icon still use it.
+kTechIdToMaterialOffset[kTechId.MedPack] = 223
 kTechIdToMaterialOffset[kTechId.ExpandingMarker] = 134
 kTechIdToMaterialOffset[kTechId.ThreatMarker] = 118
